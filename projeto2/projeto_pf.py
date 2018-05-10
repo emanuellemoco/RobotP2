@@ -4,7 +4,7 @@
 Esta classe deve conter todas as suas implementações relevantes para seu filtro de partículas
 """
 
-from pf import Particle, create_particles
+from pf import Particle, create_particles, draw_random_sample
 import numpy as np
 import inspercles # necessário para o a função nb_lidar que simula o laser
 import math
@@ -22,7 +22,7 @@ robot = Particle(largura/2, altura/2, math.pi/4, 1.0)
 # Nuvem de particulas
 particulas = []
 
-num_particulas = 10
+num_particulas = 300
 
 
 # Os angulos em que o robo simulado vai ter sensores
@@ -60,7 +60,7 @@ movimentos_relativos = [[0, -math.pi/3],[10, 0],[10, 0], [10, 0], [10, 0],[15, 0
 movimentos = movimentos_relativos
 
 
-
+#def cria_particulas(minx=0, miny=0, maxx=largura, maxy=altura, n_particulas=num_particulas-1): e particula igual do robo
 def cria_particulas(minx=0, miny=0, maxx=largura, maxy=altura, n_particulas=num_particulas):
     """
         Cria uma lista de partículas distribuídas de forma uniforme entre minx, miny, maxx e maxy
@@ -89,15 +89,16 @@ def move_particulas(particulas, movimento):
     #valores do desvio padrão (sigma) são dados
     sigma_x = 1.5 
     sigma_y = 1.5
-    sigma_theta = 1.5
+    sigma_theta = math.radians(1.2)  #1 a 2 graus
 
     media_linar = movimento[0]
     media_angular = movimento[1]
 
-    normal_linear = norm.rvs(loc=media_linar, scale=sigma_x)
-    normal_angular = norm.rvs(loc=media_angular, scale=sigma_y)
+
 
     for p in particulas:  #deslocamento linear na direção que o robo ta olhando
+      normal_linear = norm.rvs(loc=media_linar, scale=sigma_x)
+      normal_angular = norm.rvs(loc=media_angular, scale=sigma_theta)
       particulas = p.move_relative([normal_linear,normal_angular])
 
     return particulas
@@ -115,29 +116,41 @@ def leituras_laser_evidencias(robot, particulas):
         Você vai precisar calcular para o robo
         
     """
+    # alfa = 1/soma
+
+    #leitura do robo:
     leitura_robo = inspercles.nb_lidar(robot, angles)
 
-    # soma = 0
-    # for b in range (len(particulas)):
-    #   soma += particulas[b]
-
-    # alfa = 1/soma
-    
-    probabilidade =1
-    sigma = 1.5
+    sigma = 9.8  #usar de 4 a 7 cm
+    alfa = 0
+    soma_alfa = 0
     for i in range (len(particulas)):
       #lista com a leitura em cada angulo da partica
       leitura_particula = inspercles.nb_lidar(particulas[i], angles)
+      probabilidade =0
       
-      for b in angles:
+      #com chapeu é real (robo) e sem chapeu (particula)
+      for b in angles:  #angles = 8
         zrj =  leitura_robo[b]     #parte real robo
-        zj = leitura_particula[b] 
-        probabilidade *= math.exp(-((zj - zrj)/2*sigma**2))
+        zj = leitura_particula[b]  
+         
+        #mudar o num de particular p maior do que 500
 
+        #salva em w da particula da vez que é particulas[i]
+        probabs = norm.pdf(zj, loc=zrj, scale=sigma)
+        probabilidade += probabs
+        #probabilidade += math.exp(-((zj - zrj)/2*sigma**2))
+      
+      particulas[i].w = probabilidade 
 
+    for c in particulas:
+      soma_alfa += c.w
 
-      #com chapeu é real (confirmar)
-      #multiplicar todos os angulos x alfa (isso é a probabilidade)
+    alfa = 1/soma_alfa
+
+    for d in particulas:
+      d.w *= alfa
+    #multiplicar todos os angulos x alfa (isso é a probabilidade)
 
   # Voce vai precisar calcular a leitura para cada particula usando inspercles.nb_lidar e depois atualizar as probabilidades
 
@@ -155,8 +168,34 @@ def reamostrar(particulas, n_particulas = num_particulas):
         
         Use 1/n ou 1, não importa desde que seja a mesma
     """
-   ##### norm.rvs(media, sigma)
-    return particulas
+#######
+    sigma_x = 4  
+    sigma_y = 4
+    sigma_theta = math.radians(12)  #
+#     media = particulas[0]  ##??
+#     p = norm.rvs(loc=media, scale=sigma)
+#     particulas_exp = [[p.x, p.y, p.theta] for p in particulas]
+
+    particulas_pesos = [p.w for p in particulas]
+    
+    novas_particulas = draw_random_sample(particulas, particulas_pesos, n_particulas)
+
+    ##aplicar variacao normal em x,y,theta de cada p
+
+    for p in novas_particulas:  #deslocamento linear na direção que o robo ta olhando
+      normal_x = norm.rvs(loc=0, scale=sigma_x)
+      normal_y = norm.rvs(loc=0, scale=sigma_y)
+      normal_angular = norm.rvs(loc=0, scale=sigma_theta)
+      p.x += normal_x 
+      p.y += normal_y
+      p.theta += normal_angular
+
+    for p in novas_particulas:
+      p.w = 1
+
+      
+   #####  norm.rvs(media, sigma)
+    return novas_particulas
 
 
     
